@@ -99,10 +99,10 @@ def main(
     )
 
     images = glob.glob(os.path.join(input, "*"))
-    images = images + [images[-1]] * (stream.batch_size - 1)
+    images += [images[-1]] * (stream.batch_size - 1)
     outputs = []
 
-    for i in range(stream.batch_size - 1):
+    for _ in range(stream.batch_size - 1):
         image = images.pop(0)
         outputs.append(image)
         output_image = stream(image=image)

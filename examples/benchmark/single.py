@@ -17,8 +17,7 @@ from utils.wrapper import StreamDiffusionWrapper
 
 def download_image(url: str):
     response = requests.get(url)
-    image = PIL.Image.open(io.BytesIO(response.content))
-    return image
+    return PIL.Image.open(io.BytesIO(response.content))
 
 
 def run(

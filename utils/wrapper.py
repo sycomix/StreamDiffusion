@@ -120,8 +120,8 @@ class StreamDiffusionWrapper:
                 raise ValueError(
                     f"txt2img mode accepts only cfg_type = 'none', but got {cfg_type}"
                 )
-            if use_denoising_batch and frame_buffer_size > 1:
-                if not self.sd_turbo:
+            if not self.sd_turbo:
+                if use_denoising_batch and frame_buffer_size > 1:
                     raise ValueError(
                         "txt2img mode cannot use denoising batch with frame_buffer_size > 1."
                     )
@@ -222,10 +222,7 @@ class StreamDiffusionWrapper:
         Union[Image.Image, List[Image.Image]]
             The generated image.
         """
-        if self.mode == "img2img":
-            return self.img2img(image)
-        else:
-            return self.txt2img(prompt)
+        return self.img2img(image) if self.mode == "img2img" else self.txt2img(prompt)
 
     def txt2img(
         self, prompt: Optional[str] = None
@@ -280,7 +277,7 @@ class StreamDiffusionWrapper:
         Image.Image
             The generated image.
         """
-        if isinstance(image, str) or isinstance(image, Image.Image):
+        if isinstance(image, (str, Image.Image)):
             image = self.preprocess_image(image)
 
         image_tensor = self.stream(image)
@@ -540,8 +537,8 @@ class StreamDiffusionWrapper:
                     compile_unet(
                         stream.unet,
                         unet_model,
-                        unet_path + ".onnx",
-                        unet_path + ".opt.onnx",
+                        f"{unet_path}.onnx",
+                        f"{unet_path}.opt.onnx",
                         unet_path,
                         opt_batch_size=stream.trt_unet_batch_size,
                     )
@@ -561,8 +558,8 @@ class StreamDiffusionWrapper:
                     compile_vae_decoder(
                         stream.vae,
                         vae_decoder_model,
-                        vae_decoder_path + ".onnx",
-                        vae_decoder_path + ".opt.onnx",
+                        f"{vae_decoder_path}.onnx",
+                        f"{vae_decoder_path}.opt.onnx",
                         vae_decoder_path,
                         opt_batch_size=self.batch_size
                         if self.mode == "txt2img"
@@ -585,8 +582,8 @@ class StreamDiffusionWrapper:
                     compile_vae_encoder(
                         vae_encoder,
                         vae_encoder_model,
-                        vae_encoder_path + ".onnx",
-                        vae_encoder_path + ".opt.onnx",
+                        f"{vae_encoder_path}.onnx",
+                        f"{vae_encoder_path}.opt.onnx",
                         vae_encoder_path,
                         opt_batch_size=self.batch_size
                         if self.mode == "txt2img"
