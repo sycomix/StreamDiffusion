@@ -42,8 +42,6 @@ def install(cu: Optional[Literal["11", "12"]] = get_cuda_version_from_torch()):
             "install onnx-graphsurgeon==0.3.26 --extra-index-url https://pypi.ngc.nvidia.com"
         )
 
-    pass
-
 
 if __name__ == "__main__":
     fire.Fire(install)

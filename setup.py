@@ -27,8 +27,7 @@ def deps_list(*pkgs):
     return [deps[pkg] for pkg in pkgs]
 
 
-extras = {}
-extras["xformers"] = deps_list("xformers")
+extras = {"xformers": deps_list("xformers")}
 extras["torch"] = deps_list("torch", "accelerate")
 extras["tensorrt"] = deps_list("protobuf", "cuda-python", "onnx", "onnxruntime", "colored")
 

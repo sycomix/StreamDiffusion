@@ -30,8 +30,7 @@ def _postprocess_image(queue: Queue) -> None:
 
 def download_image(url: str):
     response = requests.get(url)
-    image = PIL.Image.open(io.BytesIO(response.content))
-    return image
+    return PIL.Image.open(io.BytesIO(response.content))
 
 
 def run(

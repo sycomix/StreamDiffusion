@@ -74,9 +74,7 @@ def CUASSERT(cuda_ret):
         raise RuntimeError(
             f"CUDA ERROR: {err}, error code reference: https://nvidia.github.io/cuda-python/module/cudart.html#cuda.cudart.cudaError_t"
         )
-    if len(cuda_ret) > 1:
-        return cuda_ret[1]
-    return None
+    return cuda_ret[1] if len(cuda_ret) > 1 else None
 
 
 class Engine:
@@ -101,9 +99,7 @@ class Engine:
     def refit(self, onnx_path, onnx_refit_path):
         def convert_int64(arr):
             # TODO: smarter conversion
-            if len(arr.shape) == 0:
-                return np.int32(arr)
-            return arr
+            return np.int32(arr) if len(arr.shape) == 0 else arr
 
         def add_to_map(refit_dict, name, values):
             if name in refit_dict:
@@ -123,22 +119,18 @@ class Engine:
             # Constant nodes in ONNX do not have inputs but have a constant output
             if node.op == "Constant":
                 name_map[refit_node.outputs[0].name] = node.outputs[0].name
-            # Handle scale and bias weights
             elif node.op == "Conv":
                 if node.inputs[1].__class__ == gs.Constant:
-                    name_map[refit_node.name + "_TRTKERNEL"] = node.name + "_TRTKERNEL"
+                    name_map[f"{refit_node.name}_TRTKERNEL"] = f"{node.name}_TRTKERNEL"
                 if node.inputs[2].__class__ == gs.Constant:
-                    name_map[refit_node.name + "_TRTBIAS"] = node.name + "_TRTBIAS"
-            # For all other nodes: find node inputs that are initializers (gs.Constant)
+                    name_map[f"{refit_node.name}_TRTBIAS"] = f"{node.name}_TRTBIAS"
             else:
                 for i, inp in enumerate(node.inputs):
                     if inp.__class__ == gs.Constant:
                         name_map[refit_node.inputs[i].name] = inp.name
 
         def map_name(name):
-            if name in name_map:
-                return name_map[name]
-            return name
+            return name_map[name] if name in name_map else name
 
         # Construct refit dictionary
         refit_dict = {}
@@ -147,13 +139,13 @@ class Engine:
         for layer_name, role in zip(all_weights[0], all_weights[1]):
             # for speciailized roles, use a unique name in the map:
             if role == trt.WeightsRole.KERNEL:
-                name = layer_name + "_TRTKERNEL"
+                name = f"{layer_name}_TRTKERNEL"
             elif role == trt.WeightsRole.BIAS:
-                name = layer_name + "_TRTBIAS"
+                name = f"{layer_name}_TRTBIAS"
             else:
                 name = layer_name
 
-            assert name not in refit_dict, "Found duplicate layer: " + name
+            assert name not in refit_dict, f"Found duplicate layer: {name}"
             refit_dict[name] = None
 
         for n in refit_nodes:
@@ -163,17 +155,15 @@ class Engine:
                 print(f"Add Constant {name}\n")
                 add_to_map(refit_dict, name, n.outputs[0].values)
 
-            # Handle scale and bias weights
             elif n.op == "Conv":
                 if n.inputs[1].__class__ == gs.Constant:
-                    name = map_name(n.name + "_TRTKERNEL")
+                    name = map_name(f"{n.name}_TRTKERNEL")
                     add_to_map(refit_dict, name, n.inputs[1].values)
 
                 if n.inputs[2].__class__ == gs.Constant:
-                    name = map_name(n.name + "_TRTBIAS")
+                    name = map_name(f"{n.name}_TRTBIAS")
                     add_to_map(refit_dict, name, n.inputs[2].values)
 
-            # For all other nodes: find node inputs that are initializers (AKA gs.Constant)
             else:
                 for inp in n.inputs:
                     name = map_name(inp.name)
@@ -182,9 +172,9 @@ class Engine:
 
         for layer_name, weights_role in zip(all_weights[0], all_weights[1]):
             if weights_role == trt.WeightsRole.KERNEL:
-                custom_name = layer_name + "_TRTKERNEL"
+                custom_name = f"{layer_name}_TRTKERNEL"
             elif weights_role == trt.WeightsRole.BIAS:
-                custom_name = layer_name + "_TRTBIAS"
+                custom_name = f"{layer_name}_TRTBIAS"
             else:
                 custom_name = layer_name
 
@@ -332,7 +322,7 @@ def create_models(
     unet_in_channels: int = 4,
     embedding_dim: int = 768,
 ):
-    models = {
+    return {
         "clip": CLIP(
             hf_token=use_auth_token,
             device=device,
@@ -360,7 +350,6 @@ def create_models(
             embedding_dim=embedding_dim,
         ),
     }
-    return models
 
 
 def build_engine(
@@ -377,11 +366,7 @@ def build_engine(
 ):
     _, free_mem, _ = cudart.cudaMemGetInfo()
     GiB = 2**30
-    if free_mem > 6 * GiB:
-        activation_carveout = 4 * GiB
-        max_workspace_size = free_mem - activation_carveout
-    else:
-        max_workspace_size = 0
+    max_workspace_size = free_mem - 4 * GiB if free_mem > 6 * GiB else 0
     engine = Engine(engine_path)
     input_profile = model_data.get_input_profile(
         opt_batch_size,

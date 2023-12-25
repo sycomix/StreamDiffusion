@@ -28,15 +28,11 @@ def numpy_to_pil(images: np.ndarray) -> PIL.Image.Image:
     if images.ndim == 3:
         images = images[None, ...]
     images = (images * 255).round().astype("uint8")
-    if images.shape[-1] == 1:
-        # special case for grayscale (single channel) images
-        pil_images = [
-            PIL.Image.fromarray(image.squeeze(), mode="L") for image in images
-        ]
-    else:
-        pil_images = [PIL.Image.fromarray(image) for image in images]
-
-    return pil_images
+    return (
+        [PIL.Image.fromarray(image.squeeze(), mode="L") for image in images]
+        if images.shape[-1] == 1
+        else [PIL.Image.fromarray(image) for image in images]
+    )
 
 
 def postprocess_image(
@@ -52,8 +48,8 @@ def postprocess_image(
     if output_type == "latent":
         return image
 
-    do_normalize_flg = True
     if do_denormalize is None:
+        do_normalize_flg = True
         do_denormalize = [do_normalize_flg] * image.shape[0]
 
     image = torch.stack(
@@ -87,12 +83,10 @@ def process_image(
 def pil2tensor(image_pil: PIL.Image.Image) -> torch.Tensor:
     height = image_pil.height
     width = image_pil.width
-    imgs = []
     img, _ = process_image(image_pil)
-    imgs.append(img)
+    imgs = [img]
     imgs = torch.vstack(imgs)
     images = torch.nn.functional.interpolate(
         imgs, size=(height, width), mode="bilinear"
     )
-    image_tensors = images.to(torch.float16)
-    return image_tensors
+    return images.to(torch.float16)

@@ -112,15 +112,15 @@ class BaseModel:
 
     def optimize(self, onnx_graph):
         opt = Optimizer(onnx_graph, verbose=self.verbose)
-        opt.info(self.name + ": original")
+        opt.info(f"{self.name}: original")
         opt.cleanup()
-        opt.info(self.name + ": cleanup")
+        opt.info(f"{self.name}: cleanup")
         opt.fold_constants()
-        opt.info(self.name + ": fold constants")
+        opt.info(f"{self.name}: fold constants")
         opt.infer_shapes()
-        opt.info(self.name + ": shape inference")
+        opt.info(f"{self.name}: shape inference")
         onnx_opt_graph = opt.cleanup(return_onnx=True)
-        opt.info(self.name + ": finished")
+        opt.info(f"{self.name}: finished")
         return onnx_opt_graph
 
     def check_dims(self, batch_size, image_height, image_width):
@@ -204,18 +204,18 @@ class CLIP(BaseModel):
 
     def optimize(self, onnx_graph):
         opt = Optimizer(onnx_graph)
-        opt.info(self.name + ": original")
+        opt.info(f"{self.name}: original")
         opt.select_outputs([0])  # delete graph output#1
         opt.cleanup()
-        opt.info(self.name + ": remove output[1]")
+        opt.info(f"{self.name}: remove output[1]")
         opt.fold_constants()
-        opt.info(self.name + ": fold constants")
+        opt.info(f"{self.name}: fold constants")
         opt.infer_shapes()
-        opt.info(self.name + ": shape inference")
+        opt.info(f"{self.name}: shape inference")
         opt.select_outputs([0], names=["text_embeddings"])  # rename network output
-        opt.info(self.name + ": remove output[0]")
+        opt.info(f"{self.name}: remove output[0]")
         opt_onnx_graph = opt.cleanup(return_onnx=True)
-        opt.info(self.name + ": finished")
+        opt.info(f"{self.name}: finished")
         return opt_onnx_graph
 
 
