@@ -3,6 +3,7 @@ import sys
 import time
 import threading
 from multiprocessing import Process, Queue, get_context
+from multiprocessing.connection import Connection
 from typing import List, Literal, Dict, Optional
 import torch
 import PIL.Image
@@ -17,26 +18,26 @@ from utils.viewer import receive_images
 from utils.wrapper import StreamDiffusionWrapper
 
 inputs = []
-stop_capture = False
 top = 0
 left = 0
 
 def screen(
+    event: threading.Event,
     height: int = 512,
     width: int = 512,
     monitor: Dict[str, int] = {"top": 300, "left": 200, "width": 512, "height": 512},
 ):
     global inputs
-    global stop_capture
     with mss.mss() as sct:
         while True:
+            if event.is_set():
+                print("terminate read thread")
+                break
             img = sct.grab(monitor)
             img = PIL.Image.frombytes("RGB", img.size, img.bgra, "raw", "BGRX")
             img.resize((height, width))
             inputs.append(pil2tensor(img))
-            if stop_capture:
-                return
-
+    print('exit : screen')
 def dummy_screen(
         width: int,
         height: int,
@@ -58,9 +59,18 @@ def dummy_screen(
     root.mainloop()
     return {"top": top, "left": left, "width": width, "height": height}
 
+def monitor_setting_process(
+    width: int,
+    height: int,
+    monitor_sender: Connection,
+) -> None:
+    monitor = dummy_screen(width, height)
+    monitor_sender.send(monitor)
+
 def image_generation_process(
     queue: Queue,
     fps_queue: Queue,
+    close_queue: Queue,
     model_id_or_path: str,
     lora_dict: Optional[Dict[str, float]],
     prompt: str,
@@ -78,7 +88,7 @@ def image_generation_process(
     enable_similar_image_filter: bool,
     similar_image_filter_threshold: float,
     similar_image_filter_max_skip_frame: float,
-    monitor: Dict[str, int],
+    monitor_receiver : Connection,
 ) -> None:
     """
     Process for generating images based on a prompt using a specified model.
@@ -94,7 +104,7 @@ def image_generation_process(
     lora_dict : Optional[Dict[str, float]], optional
         The lora_dict to load, by default None.
         Keys are the LoRA names and values are the LoRA scales.
-        Example: {"LoRA_1" : 0.5 , "LoRA_2" : 0.7 ,...}
+        Example: {'LoRA_1' : 0.5 , 'LoRA_2' : 0.7 ,...}
     prompt : str
         The prompt to generate images from.
     negative_prompt : str, optional
@@ -133,7 +143,6 @@ def image_generation_process(
     """
     
     global inputs
-    global stop_capture
     stream = StreamDiffusionWrapper(
         model_id_or_path=model_id_or_path,
         lora_dict=lora_dict,
@@ -161,12 +170,17 @@ def image_generation_process(
         delta=delta,
     )
 
-    input_screen = threading.Thread(target=screen, args=(height, width, monitor))
+    monitor = monitor_receiver.recv()
+
+    event = threading.Event()
+    input_screen = threading.Thread(target=screen, args=(event, height, width, monitor))
     input_screen.start()
     time.sleep(5)
 
     while True:
         try:
+            if not close_queue.empty(): # closing check
+                break
             if len(inputs) < frame_buffer_size:
                 time.sleep(0.005)
                 continue
@@ -188,10 +202,12 @@ def image_generation_process(
             fps = 1 / (time.time() - start_time)
             fps_queue.put(fps)
         except KeyboardInterrupt:
-            stop_capture = True
-            print(f"fps: {fps}")
-            return
+            break
 
+    print("closing image_generation_process...")
+    event.set() # stop capture thread
+    input_screen.join()
+    print(f"fps: {fps}")
 
 def main(
     model_id_or_path: str = "KBlueLeaf/kohaku-v2.1",
@@ -215,15 +231,19 @@ def main(
     """
     Main function to start the image generation and viewer processes.
     """
-    monitor = dummy_screen(width, height)
     ctx = get_context('spawn')
     queue = ctx.Queue()
     fps_queue = ctx.Queue()
+    close_queue = Queue()
+
+    monitor_sender, monitor_receiver = ctx.Pipe()
+
     process1 = ctx.Process(
         target=image_generation_process,
         args=(
             queue,
             fps_queue,
+            close_queue,
             model_id_or_path,
             lora_dict,
             prompt,
@@ -241,16 +261,37 @@ def main(
             enable_similar_image_filter,
             similar_image_filter_threshold,
             similar_image_filter_max_skip_frame,
-            monitor
+            monitor_receiver,
             ),
     )
     process1.start()
 
+    monitor_process = ctx.Process(
+        target=monitor_setting_process,
+        args=(
+            width,
+            height,
+            monitor_sender,
+            ),
+    )
+    monitor_process.start()
+    monitor_process.join()
+
     process2 = ctx.Process(target=receive_images, args=(queue, fps_queue))
     process2.start()
 
-    process1.join()
+    # terminate
     process2.join()
+    print("process2 terminated.")
+    close_queue.put(True)
+    print("process1 terminating...")
+    process1.join(5) # with timeout
+    if process1.is_alive():
+        print("process1 still alive. force killing...")
+        process1.terminate() # force kill...
+    process1.join()
+    print("process1 terminated.")
+
 
 if __name__ == "__main__":
     fire.Fire(main)

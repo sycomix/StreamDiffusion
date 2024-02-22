@@ -41,7 +41,7 @@ def main(
     lora_dict : Optional[Dict[str, float]], optional
         The lora_dict to load, by default None.
         Keys are the LoRA names and values are the LoRA scales.
-        Example: {"LoRA_1" : 0.5 , "LoRA_2" : 0.7 ,...}
+        Example: {'LoRA_1' : 0.5 , 'LoRA_2' : 0.7 ,...}
     prompt : str
         The prompt to generate images from.
     scale : float, optional
@@ -60,8 +60,8 @@ def main(
     video_info = read_video(input)
     video = video_info[0] / 255
     fps = video_info[2]["video_fps"]
-    width = int(video.shape[1] * scale)
-    height = int(video.shape[2] * scale)
+    height = int(video.shape[1] * scale)
+    width = int(video.shape[2] * scale)
 
     stream = StreamDiffusionWrapper(
         model_id_or_path=model_id,
@@ -86,7 +86,7 @@ def main(
         num_inference_steps=50,
     )
 
-    video_result = torch.zeros(video.shape[0], width, height, 3)
+    video_result = torch.zeros(video.shape[0], height, width, 3)
 
     for _ in range(stream.batch_size):
         stream(image=video[0].permute(2, 0, 1))
